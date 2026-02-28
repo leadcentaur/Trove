@@ -38,10 +38,9 @@ class MarketplaceScraper:
             page.on("response", self._on_response)
 
             url = self._settings.search.build_url()
-            logger.info("Navigating to: %s", url)
-            await page.goto(url, wait_until="domcontentloaded", timeout=60000)
 
-            await self._browser.wait_for_login(page)
+            # Ensure we're logged into Facebook before navigating to marketplace
+            await self._browser.ensure_login(page, url)
             await self._wait_for_content(page)
             await self._scroll_for_listings(page)
 

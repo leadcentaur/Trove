@@ -83,96 +83,119 @@ class BrowserManager:
         logger.debug("Sleeping %.1fs", delay)
         await asyncio.sleep(delay)
 
-    async def wait_for_login(self, page: Page) -> None:
-        """Detect if Facebook requires login, auto-login if credentials are set, or wait for manual login."""
-        if not await self._needs_login(page):
-            # Try dismissing an overlay modal (logged-in users sometimes see one)
-            try:
-                close_btn = page.locator('div[aria-label="Close"]')
-                if await close_btn.count() > 0:
-                    await close_btn.first.click()
-                    await asyncio.sleep(0.5)
-                    return
-                await page.keyboard.press("Escape")
+    async def ensure_login(self, page: Page, target_url: str) -> None:
+        """Ensure we're logged into Facebook, then navigate to the target URL.
+
+        Goes to facebook.com first to check the session. If not logged in,
+        auto-logs in with credentials from .env or waits for manual login.
+        Then navigates to the target marketplace URL.
+        """
+        # Go to Facebook home to check session state
+        logger.info("Checking Facebook login status...")
+        await page.goto("https://www.facebook.com/", wait_until="domcontentloaded", timeout=30000)
+        await asyncio.sleep(3)
+
+        if await self._is_logged_in(page):
+            logger.info("Already logged in")
+        else:
+            logger.info("Not logged into Facebook")
+
+            if self._settings.fb_email and self._settings.fb_password:
+                logger.info("Attempting auto-login...")
+                await self._auto_login(page)
+            else:
+                logger.info("No credentials configured — please log in through the browser window")
+
+            # Wait for login to succeed (manual or post-auto-login)
+            if not await self._is_logged_in(page):
+                logger.info("Waiting for login to complete...")
+                while not await self._is_logged_in(page):
+                    await asyncio.sleep(2)
+
+            logger.info("Login successful")
+
+        # Dismiss any modals, then navigate to marketplace
+        try:
+            close_btn = page.locator('div[aria-label="Close"]')
+            if await close_btn.count() > 0:
+                await close_btn.first.click()
                 await asyncio.sleep(0.5)
-            except Exception:
-                pass
-            return
+        except Exception:
+            pass
 
-        # Try auto-login if credentials are configured
-        if self._settings.fb_email and self._settings.fb_password:
-            logger.info("Facebook login required — attempting auto-login...")
-            await self._auto_login(page)
-
-            if not await self._needs_login(page):
-                logger.info("Auto-login successful")
-                return
-
-            logger.warning("Auto-login failed — falling back to manual login")
-
-        # Manual login fallback
-        logger.info("Facebook login required — please log in through the browser window")
-        logger.info("Waiting for you to complete login...")
-
-        while await self._needs_login(page):
-            await asyncio.sleep(2)
-
-        logger.info("Login detected — continuing")
-        await asyncio.sleep(2)
+        logger.info("Navigating to: %s", target_url)
+        await page.goto(target_url, wait_until="domcontentloaded", timeout=60000)
 
     async def _auto_login(self, page: Page) -> None:
-        """Fill in the Facebook login form and submit."""
-        target_url = page.url
-
-        # Navigate to login page if we're not already on one with a form
-        email_field = page.locator('input[name="email"]')
-        if await email_field.count() == 0:
-            await page.goto("https://www.facebook.com/login/", wait_until="domcontentloaded", timeout=30000)
-            await asyncio.sleep(2)
+        """Navigate to the Facebook login page, fill credentials, and submit."""
+        await page.goto("https://www.facebook.com/login/", wait_until="domcontentloaded", timeout=30000)
+        await asyncio.sleep(2)
 
         try:
             email_field = page.locator('input[name="email"]')
             pass_field = page.locator('input[name="pass"]')
-            login_btn = page.locator('button[name="login"], button[id="loginbutton"], input[value="Log in"]')
 
             await email_field.first.fill(self._settings.fb_email)
             await asyncio.sleep(0.5)
             await pass_field.first.fill(self._settings.fb_password)
             await asyncio.sleep(0.5)
-            await login_btn.first.click()
 
-            # Wait for navigation away from login page
-            for _ in range(15):
-                await asyncio.sleep(2)
-                if not await self._needs_login(page):
+            # Try multiple strategies to submit the login form
+            submitted = False
+
+            # Strategy 1: Click a visible login button
+            button_selectors = [
+                'button[name="login"]',
+                'button[id="loginbutton"]',
+                'button[data-testid="royal_login_button"]',
+                'input[value="Log In"]',
+                'input[value="Log in"]',
+                'button[type="submit"]',
+            ]
+            for selector in button_selectors:
+                btn = page.locator(selector)
+                if await btn.count() > 0:
+                    logger.info("Clicking login button: %s", selector)
+                    await btn.first.click(timeout=10000)
+                    submitted = True
                     break
 
-            # Navigate back to the original marketplace URL
-            await asyncio.sleep(2)
-            if "marketplace" not in page.url:
-                logger.info("Navigating back to marketplace...")
-                await page.goto(target_url, wait_until="domcontentloaded", timeout=60000)
+            # Strategy 2: Press Enter on the password field
+            if not submitted:
+                logger.info("No login button found — pressing Enter to submit")
+                await pass_field.first.press("Enter")
+
+            # Wait for navigation away from login page (up to 30s)
+            for _ in range(15):
                 await asyncio.sleep(2)
+                url = page.url
+                if "/login" not in url and "checkpoint" not in url:
+                    break
+
+            await asyncio.sleep(2)
 
         except Exception as e:
             logger.warning("Auto-login error: %s", e)
 
     @staticmethod
-    async def _needs_login(page: Page) -> bool:
-        """Check if the current page is a Facebook login wall."""
+    async def _is_logged_in(page: Page) -> bool:
+        """Check if the user is logged into Facebook by looking for logged-in UI elements."""
         url = page.url
-        if "/login" in url or "checkpoint" in url:
-            return True
+        # If we're on the login page, definitely not logged in
+        if "/login" in url or "/checkpoint" in url:
+            return False
 
-        # Check for login form on the page (modal or full-page)
-        login_form = page.locator('form[action*="login"], #login_form, input[name="email"]')
-        if await login_form.count() > 0:
-            # Make sure it's not just a tiny hidden element — check for marketplace content too
-            marketplace = page.locator(
-                'a[href*="/marketplace/item/"], '
-                'div[aria-label="Collection of Marketplace items"]'
-            )
-            if await marketplace.count() == 0:
+        # Look for elements that only appear when logged in
+        selectors = [
+            'svg[aria-label="Your profile"]',
+            'div[aria-label="Account"]',
+            'a[aria-label="Messenger"]',
+            'a[aria-label="Notifications"]',
+            'input[aria-label="Search Facebook"]',
+        ]
+        for selector in selectors:
+            locator = page.locator(selector)
+            if await locator.count() > 0:
                 return True
 
         return False

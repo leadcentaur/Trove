@@ -40,6 +40,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--find-deals", action="store_true", help="Run deal evaluation on scraped listings")
     parser.add_argument("--evaluate", type=str, metavar="FILE", help="Evaluate deals from a previously scraped JSON file")
     parser.add_argument("--threshold", type=float, help="Minimum deal score to show (0.0-1.0, default 0.30)")
+    parser.add_argument("--notify-telegram", action="store_true", help="Send deal alerts to Telegram")
     return parser.parse_args()
 
 
@@ -101,7 +102,9 @@ async def scrape(settings: Settings) -> list:
     return listings
 
 
-async def evaluate_deals(settings: Settings, listings: list) -> None:
+async def evaluate_deals(
+    settings: Settings, listings: list, notify_telegram: bool = False
+) -> None:
     """Run deal evaluation on listings."""
     from trouve.agents.evaluator import DealEvaluator
     from trouve.notifications.console import print_deals
@@ -135,6 +138,22 @@ async def evaluate_deals(settings: Settings, listings: list) -> None:
         location=settings.search.location,
     )
 
+    # Telegram notifications
+    if notify_telegram and settings.telegram_bot_token and settings.telegram_chat_id:
+        from trouve.notifications.telegram import send_deals
+
+        await send_deals(
+            evaluations,
+            threshold=settings.deal_score_threshold,
+            bot_token=settings.telegram_bot_token,
+            chat_id=settings.telegram_chat_id,
+        )
+    elif notify_telegram:
+        logger.warning(
+            "Telegram notification requested but TELEGRAM_BOT_TOKEN and/or "
+            "TELEGRAM_CHAT_ID not set in .env"
+        )
+
 
 async def run(args: argparse.Namespace) -> None:
     settings = Settings()
@@ -156,13 +175,13 @@ async def run(args: argparse.Namespace) -> None:
         listings = [Listing(**item) for item in data.get("listings", [])]
         logger.info("Loaded %d listings", len(listings))
 
-        await evaluate_deals(settings, listings)
+        await evaluate_deals(settings, listings, notify_telegram=args.notify_telegram)
     else:
         # Scrape (and optionally evaluate)
         listings = await scrape(settings)
 
         if args.find_deals and listings:
-            await evaluate_deals(settings, listings)
+            await evaluate_deals(settings, listings, notify_telegram=args.notify_telegram)
 
 
 def main() -> None:

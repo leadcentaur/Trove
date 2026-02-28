@@ -101,6 +101,10 @@ class Settings(BaseSettings):
     fb_email: str = ""
     fb_password: str = ""
 
+    # Telegram notifications
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+
     # Nested
     proxy: ProxySettings = Field(default_factory=ProxySettings)
     search: SearchParams = Field(default_factory=SearchParams)
