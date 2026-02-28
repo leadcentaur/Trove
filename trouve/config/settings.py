@@ -1,3 +1,4 @@
+import random
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlencode
@@ -82,8 +83,8 @@ class Settings(BaseSettings):
     max_delay: float = 12.0
     scroll_pause: float = 3.0
 
-    # Limits
-    max_listings: int = 100
+    # Limits (0 = unlimited, default = random 90-115)
+    max_listings: int = Field(default_factory=lambda: random.randint(90, 115))
 
     # Output
     output_dir: Path = Path("./data/raw")
@@ -95,6 +96,10 @@ class Settings(BaseSettings):
     identifier_model: str = "claude-haiku-4-5-20251001"
     evaluator_model: str = "claude-sonnet-4-5-20250929"
     max_eval_concurrency: int = 5
+
+    # Facebook login
+    fb_email: str = ""
+    fb_password: str = ""
 
     # Nested
     proxy: ProxySettings = Field(default_factory=ProxySettings)

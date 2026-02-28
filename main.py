@@ -29,13 +29,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("-l", "--location", type=str, help="City/area (e.g. 'seattle')")
     parser.add_argument("--min-price", type=int, help="Minimum price filter")
     parser.add_argument("--max-price", type=int, help="Maximum price filter")
-    parser.add_argument("-n", "--max-listings", type=int, help="Max listings to scrape")
+    parser.add_argument("-n", "--max-listings", type=int, help="Max listings to scrape (default: random 90-115)")
+    parser.add_argument("--unlimited", action="store_true", help="Scrape with no listing limit (scroll until exhausted)")
     parser.add_argument("--days-listed", type=int, help="Filter by days since listed")
     parser.add_argument("--sort-by", type=str, help="Sort order (e.g. 'creation_time_descend')")
     parser.add_argument("-o", "--output-dir", type=str, help="Output directory")
     parser.add_argument("--headless", action="store_true", default=None, help="Run browser in headless mode")
 
-    # Deal finder
+
     parser.add_argument("--find-deals", action="store_true", help="Run deal evaluation on scraped listings")
     parser.add_argument("--evaluate", type=str, metavar="FILE", help="Evaluate deals from a previously scraped JSON file")
     parser.add_argument("--threshold", type=float, help="Minimum deal score to show (0.0-1.0, default 0.30)")
@@ -59,7 +60,9 @@ def apply_overrides(settings: Settings, args: argparse.Namespace) -> None:
         settings.search.sort_by = args.sort_by
 
     # Top-level settings
-    if args.max_listings is not None:
+    if args.unlimited:
+        settings.max_listings = 0
+    elif args.max_listings is not None:
         settings.max_listings = args.max_listings
     if args.output_dir is not None:
         settings.output_dir = Path(args.output_dir)
@@ -75,7 +78,10 @@ async def scrape(settings: Settings) -> list:
 
     logger = logging.getLogger(__name__)
     logger.info("Search URL: %s", settings.search.build_url())
-    logger.info("Max listings: %d", settings.max_listings)
+    if settings.max_listings == 0:
+        logger.info("Max listings: unlimited")
+    else:
+        logger.info("Max listings: %d", settings.max_listings)
 
     async with BrowserManager(settings) as browser:
         scraper = MarketplaceScraper(browser, settings)

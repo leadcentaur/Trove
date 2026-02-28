@@ -41,7 +41,7 @@ class MarketplaceScraper:
             logger.info("Navigating to: %s", url)
             await page.goto(url, wait_until="domcontentloaded", timeout=60000)
 
-            await self._browser.dismiss_login_modal(page)
+            await self._browser.wait_for_login(page)
             await self._wait_for_content(page)
             await self._scroll_for_listings(page)
 
@@ -132,10 +132,11 @@ class MarketplaceScraper:
     async def _scroll_for_listings(self, page: Page) -> None:
         """Scroll to trigger lazy-loading of additional listings."""
         max_listings = self._settings.max_listings
+        unlimited = max_listings == 0
         no_new_count = 0
         max_stale = 3
 
-        while len(self._listings) < max_listings:
+        while unlimited or len(self._listings) < max_listings:
             prev_count = len(self._listings)
 
             scroll_amount = random.randint(600, 1200)

@@ -83,15 +83,96 @@ class BrowserManager:
         logger.debug("Sleeping %.1fs", delay)
         await asyncio.sleep(delay)
 
-    async def dismiss_login_modal(self, page: Page) -> None:
-        """Dismiss Facebook login modal if present."""
-        try:
-            close_btn = page.locator('div[aria-label="Close"]')
-            if await close_btn.count() > 0:
-                await close_btn.first.click()
+    async def wait_for_login(self, page: Page) -> None:
+        """Detect if Facebook requires login, auto-login if credentials are set, or wait for manual login."""
+        if not await self._needs_login(page):
+            # Try dismissing an overlay modal (logged-in users sometimes see one)
+            try:
+                close_btn = page.locator('div[aria-label="Close"]')
+                if await close_btn.count() > 0:
+                    await close_btn.first.click()
+                    await asyncio.sleep(0.5)
+                    return
+                await page.keyboard.press("Escape")
                 await asyncio.sleep(0.5)
+            except Exception:
+                pass
+            return
+
+        # Try auto-login if credentials are configured
+        if self._settings.fb_email and self._settings.fb_password:
+            logger.info("Facebook login required — attempting auto-login...")
+            await self._auto_login(page)
+
+            if not await self._needs_login(page):
+                logger.info("Auto-login successful")
                 return
-            await page.keyboard.press("Escape")
+
+            logger.warning("Auto-login failed — falling back to manual login")
+
+        # Manual login fallback
+        logger.info("Facebook login required — please log in through the browser window")
+        logger.info("Waiting for you to complete login...")
+
+        while await self._needs_login(page):
+            await asyncio.sleep(2)
+
+        logger.info("Login detected — continuing")
+        await asyncio.sleep(2)
+
+    async def _auto_login(self, page: Page) -> None:
+        """Fill in the Facebook login form and submit."""
+        target_url = page.url
+
+        # Navigate to login page if we're not already on one with a form
+        email_field = page.locator('input[name="email"]')
+        if await email_field.count() == 0:
+            await page.goto("https://www.facebook.com/login/", wait_until="domcontentloaded", timeout=30000)
+            await asyncio.sleep(2)
+
+        try:
+            email_field = page.locator('input[name="email"]')
+            pass_field = page.locator('input[name="pass"]')
+            login_btn = page.locator('button[name="login"], button[id="loginbutton"], input[value="Log in"]')
+
+            await email_field.first.fill(self._settings.fb_email)
             await asyncio.sleep(0.5)
-        except Exception:
-            pass
+            await pass_field.first.fill(self._settings.fb_password)
+            await asyncio.sleep(0.5)
+            await login_btn.first.click()
+
+            # Wait for navigation away from login page
+            for _ in range(15):
+                await asyncio.sleep(2)
+                if not await self._needs_login(page):
+                    break
+
+            # Navigate back to the original marketplace URL
+            await asyncio.sleep(2)
+            if "marketplace" not in page.url:
+                logger.info("Navigating back to marketplace...")
+                await page.goto(target_url, wait_until="domcontentloaded", timeout=60000)
+                await asyncio.sleep(2)
+
+        except Exception as e:
+            logger.warning("Auto-login error: %s", e)
+
+    @staticmethod
+    async def _needs_login(page: Page) -> bool:
+        """Check if the current page is a Facebook login wall."""
+        url = page.url
+        if "/login" in url or "checkpoint" in url:
+            return True
+
+        # Check for login form on the page (modal or full-page)
+        login_form = page.locator('form[action*="login"], #login_form, input[name="email"]')
+        if await login_form.count() > 0:
+            # Make sure it's not just a tiny hidden element — check for marketplace content too
+            marketplace = page.locator(
+                'a[href*="/marketplace/item/"], '
+                'div[aria-label="Collection of Marketplace items"]'
+            )
+            if await marketplace.count() == 0:
+                return True
+
+        return False
