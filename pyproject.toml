@@ -1,0 +1,25 @@
+[project]
+name = "trouve"
+version = "0.1.0"
+description = "Facebook Marketplace scraper using Patchright"
+requires-python = ">=3.11"
+dependencies = [
+    "patchright>=0.1",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "python-dotenv>=1.0",
+    "anthropic>=0.52",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[tool.setuptools.packages.find]
+include = ["trouve*"]
+
+[project.scripts]
+trouve = "main:main"
