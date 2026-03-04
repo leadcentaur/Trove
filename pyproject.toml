@@ -22,4 +22,4 @@ dev = [
 include = ["trouve*"]
 
 [project.scripts]
-trouve = "main:main"
+trouve = "trouve.main:main"

@@ -57,15 +57,16 @@ class DealEvaluator:
         # Stage 1: Identify guitars
         identities = await self._identifier.identify_listings(listings)
 
-        # Filter to medium/high confidence
+        # Filter to high confidence only (brand AND model identified)
         evaluable = [
             (listing, identities[listing.id])
             for listing in listings
             if listing.id in identities
-            and identities[listing.id].confidence in ("high", "medium")
+            and identities[listing.id].confidence == "high"
+            and identities[listing.id].model  # must have a specific model
         ]
         logger.info(
-            "%d/%d listings identified with medium+ confidence",
+            "%d/%d listings identified with known model",
             len(evaluable),
             len(listings),
         )
