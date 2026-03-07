@@ -13,7 +13,7 @@ _RECOMMENDATION_EMOJI = {
 }
 
 
-def _format_deal(deal: DealEvaluation) -> str:
+def _format_deal(deal: DealEvaluation, currency_symbol: str = "$") -> str:
     """Format a single deal evaluation as a Telegram message."""
     label = _RECOMMENDATION_EMOJI.get(deal.recommendation, deal.recommendation.upper())
     score_pct = f"{deal.deal_score:.0%}" if deal.deal_score is not None else "N/A"
@@ -28,7 +28,7 @@ def _format_deal(deal: DealEvaluation) -> str:
         f"{label} — {score_pct} below market",
         "",
         f"{guitar_name}",
-        f"Asking: ${deal.asking_price:,.0f} | Market: ~${deal.market_value:,.0f}",
+        f"Asking: {currency_symbol}{deal.asking_price:,.0f} | Market: ~{currency_symbol}{deal.market_value:,.0f}",
         f"Source: {deal.market_value_source}",
     ]
 
@@ -43,22 +43,28 @@ async def send_deals(
     threshold: float,
     bot_token: str,
     chat_id: str,
-) -> None:
-    """Send deal notifications to Telegram."""
+    unsent_ids: set[str] | None = None,
+    currency_symbol: str = "$",
+) -> list[str]:
+    """Send deal notifications to Telegram. Returns listing IDs that were sent."""
     deals = [
         e for e in evaluations
         if e.deal_score is not None and e.deal_score >= threshold
     ]
 
+    if unsent_ids is not None:
+        deals = [d for d in deals if d.listing_id in unsent_ids]
+
     if not deals:
         logger.info("No deals above threshold to send to Telegram")
-        return
+        return []
 
+    sent_ids: list[str] = []
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
 
     async with httpx.AsyncClient() as client:
         for deal in deals:
-            text = _format_deal(deal)
+            text = _format_deal(deal, currency_symbol=currency_symbol)
             payload = {
                 "chat_id": chat_id,
                 "text": text,
@@ -66,6 +72,7 @@ async def send_deals(
             try:
                 resp = await client.post(url, json=payload)
                 resp.raise_for_status()
+                sent_ids.append(deal.listing_id)
                 logger.info("Telegram message sent for listing %s", deal.listing_id)
             except httpx.HTTPError as exc:
                 logger.error(
@@ -73,3 +80,5 @@ async def send_deals(
                     deal.listing_id,
                     exc,
                 )
+
+    return sent_ids

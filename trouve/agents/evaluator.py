@@ -39,6 +39,7 @@ class DealEvaluator:
         deal_threshold: float = 0.30,
         max_concurrency: int = 5,
         anthropic_api_key: str = "",
+        currency_symbol: str = "$",
     ) -> None:
         self._identifier = GuitarIdentifier(model=identifier_model, api_key=anthropic_api_key)
         self._reverb = ReverbClient(api_token=reverb_token)
@@ -47,6 +48,7 @@ class DealEvaluator:
         self._evaluator_model = evaluator_model
         self._deal_threshold = deal_threshold
         self._semaphore = asyncio.Semaphore(max_concurrency)
+        self._currency_symbol = currency_symbol
 
     async def evaluate_listings(
         self, listings: list[Listing]
@@ -107,8 +109,8 @@ class DealEvaluator:
             guitar_desc = f"{guitar.brand} {guitar.model}{f' ({guitar.year})' if guitar.year else ''}"
 
             logger.info(
-                "Evaluating: \"%s\" — asking $%.0f (identified as %s)",
-                listing.title, asking_price, guitar_desc,
+                "Evaluating: \"%s\" — asking %s%.0f (identified as %s)",
+                listing.title, self._currency_symbol, asking_price, guitar_desc,
             )
 
             evaluation = DealEvaluation(
@@ -131,8 +133,8 @@ class DealEvaluator:
                 evaluation.market_value_source = "reverb_api"
                 evaluation.comparable_sales = comparables
                 logger.info(
-                    "  Reverb: found %d comps, median $%.0f",
-                    len(comparables), market_value,
+                    "  Reverb: found %d comps, median %s%.0f",
+                    len(comparables), self._currency_symbol, market_value,
                 )
             else:
                 # Fall back to Claude estimate
@@ -146,7 +148,8 @@ class DealEvaluator:
                     evaluation.market_value_source = "claude_estimate"
                     evaluation.reasoning = estimate.get("reasoning", "")
                     logger.info(
-                        "  Claude estimate: ~$%.0f (%s)",
+                        "  Claude estimate: ~%s%.0f (%s)",
+                        self._currency_symbol,
                         estimate["market_value"],
                         estimate.get("reasoning", "")[:100],
                     )
@@ -171,16 +174,17 @@ class DealEvaluator:
             if not evaluation.reasoning and evaluation.deal_score is not None:
                 evaluation.reasoning = (
                     f"{guitar_desc}"
-                    f" — asking ${asking_price:.0f}, market ~${evaluation.market_value:.0f}"
+                    f" — asking {self._currency_symbol}{asking_price:,.0f},"
+                    f" market ~{self._currency_symbol}{evaluation.market_value:,.0f}"
                 )
 
             if evaluation.deal_score is not None:
                 logger.info(
-                    "  Result: %s (score %.0f%%) — asking $%.0f vs market $%.0f",
+                    "  Result: %s (score %.0f%%) — asking %s%.0f vs market %s%.0f",
                     evaluation.recommendation.upper().replace("_", " "),
                     evaluation.deal_score * 100,
-                    asking_price,
-                    evaluation.market_value or 0,
+                    self._currency_symbol, asking_price,
+                    self._currency_symbol, evaluation.market_value or 0,
                 )
             else:
                 logger.info("  Result: UNKNOWN — could not determine value")
@@ -201,7 +205,7 @@ class DealEvaluator:
         if existing_comps:
             parts.append("\nPartial comparable data found:")
             for comp in existing_comps[:5]:
-                parts.append(f"  - {comp.title}: ${comp.price:.0f} ({comp.source})")
+                parts.append(f"  - {comp.title}: {self._currency_symbol}{comp.price:.0f} ({comp.source})")
 
         user_msg = "\n".join(parts)
 

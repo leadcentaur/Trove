@@ -20,7 +20,7 @@ _RECOMMENDATION_STYLE = {
 }
 
 
-def print_deals(evaluations: list[DealEvaluation], threshold: float = 0.0) -> None:
+def print_deals(evaluations: list[DealEvaluation], threshold: float = 0.0, currency_symbol: str = "$") -> None:
     """Print deal evaluations to the terminal."""
     deals = [
         e for e in evaluations
@@ -44,9 +44,9 @@ def print_deals(evaluations: list[DealEvaluation], threshold: float = 0.0) -> No
 
         print(f"  {_BOLD}#{i}{_RESET} {style}[{label}]{_RESET} {score_pct} below market")
         print(f"     {_CYAN}{deal.listing_title}{_RESET}")
-        print(f"     Asking: ${deal.asking_price:.0f}", end="")
+        print(f"     Asking: {currency_symbol}{deal.asking_price:,.0f}", end="")
         if deal.market_value:
-            print(f"  |  Market value: ~${deal.market_value:.0f} ({deal.market_value_source})")
+            print(f"  |  Market value: ~{currency_symbol}{deal.market_value:,.0f} ({deal.market_value_source})")
         else:
             print()
 

@@ -88,6 +88,7 @@ class Settings(BaseSettings):
 
     # Output
     output_dir: Path = Path("./data/raw")
+    db_path: Path = Path("./data/trouve.db")
 
     # Deal finder
     anthropic_api_key: str = ""

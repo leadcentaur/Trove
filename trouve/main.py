@@ -107,14 +107,18 @@ async def evaluate_deals(
 ) -> None:
     """Run deal evaluation on listings."""
     from trouve.agents.evaluator import DealEvaluator
+    from trouve.db import get_unsent_deal_ids, init_db, mark_notified, save_evaluations
     from trouve.notifications.console import print_deals
     from trouve.notifications.report import save_deal_report
+    from trouve.utils.currency import get_currency
 
     logger = logging.getLogger(__name__)
 
     if not listings:
         logger.warning("No listings to evaluate")
         return
+
+    currency = get_currency(settings.search.location)
 
     evaluator = DealEvaluator(
         identifier_model=settings.identifier_model,
@@ -123,12 +127,13 @@ async def evaluate_deals(
         deal_threshold=settings.deal_score_threshold,
         max_concurrency=settings.max_eval_concurrency,
         anthropic_api_key=settings.anthropic_api_key,
+        currency_symbol=currency.symbol,
     )
 
     evaluations = await evaluator.evaluate_listings(listings)
 
     # Print to terminal
-    print_deals(evaluations, threshold=settings.deal_score_threshold)
+    print_deals(evaluations, threshold=settings.deal_score_threshold, currency_symbol=currency.symbol)
 
     # Save report
     save_deal_report(
@@ -138,21 +143,40 @@ async def evaluate_deals(
         location=settings.search.location,
     )
 
-    # Telegram notifications
-    if notify_telegram and settings.telegram_bot_token and settings.telegram_chat_id:
-        from trouve.notifications.telegram import send_deals
-
-        await send_deals(
+    # Persist to DB
+    conn = init_db(settings.db_path)
+    try:
+        save_evaluations(
+            conn,
             evaluations,
-            threshold=settings.deal_score_threshold,
-            bot_token=settings.telegram_bot_token,
-            chat_id=settings.telegram_chat_id,
+            query=settings.search.query,
+            location=settings.search.location,
         )
-    elif notify_telegram:
-        logger.warning(
-            "Telegram notification requested but TELEGRAM_BOT_TOKEN and/or "
-            "TELEGRAM_CHAT_ID not set in .env"
-        )
+
+        # Telegram notifications (with dedup)
+        if notify_telegram and settings.telegram_bot_token and settings.telegram_chat_id:
+            from trouve.notifications.telegram import send_deals
+
+            all_ids = [e.listing_id for e in evaluations]
+            unsent_ids = get_unsent_deal_ids(conn, all_ids)
+
+            sent_ids = await send_deals(
+                evaluations,
+                threshold=settings.deal_score_threshold,
+                bot_token=settings.telegram_bot_token,
+                chat_id=settings.telegram_chat_id,
+                unsent_ids=unsent_ids,
+                currency_symbol=currency.symbol,
+            )
+            if sent_ids:
+                mark_notified(conn, sent_ids)
+        elif notify_telegram:
+            logger.warning(
+                "Telegram notification requested but TELEGRAM_BOT_TOKEN and/or "
+                "TELEGRAM_CHAT_ID not set in .env"
+            )
+    finally:
+        conn.close()
 
 
 async def run(args: argparse.Namespace) -> None:
