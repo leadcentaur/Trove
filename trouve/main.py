@@ -119,6 +119,10 @@ async def evaluate_deals(
         return
 
     currency = get_currency(settings.search.location)
+    logger.info(
+        "Location: %s | Currency: %s (%s)",
+        settings.search.location, currency.code, currency.symbol,
+    )
 
     evaluator = DealEvaluator(
         identifier_model=settings.identifier_model,
