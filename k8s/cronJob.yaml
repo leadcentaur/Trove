@@ -1,0 +1,51 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: my-cronjob
+  namespace: default
+spec:
+  schedule: "0 */6 * * *"          # Every 6 hours
+  timeZone: "America/New_York"     # Optional (K8s 1.27+)
+  concurrencyPolicy: Forbid        # Allow | Forbid | Replace
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 200
+  suspend: false
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      activeDeadlineSeconds: 600   # Kill job after 10 min
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app: my-cronjob
+        spec:
+          restartPolicy: OnFailure # Never | OnFailure
+          containers:
+            - name: worker
+              image: my-registry/my-image:latest
+              command: ["python", "run_task.py"]
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "128Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "512Mi"
+              env:
+                - name: ENV_VAR
+                  value: "production"
+                - name: SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: my-secret
+                      key: api-key
+              volumeMounts:
+                - name: config
+                  mountPath: /etc/config
+                  readOnly: true
+          volumes:
+            - name: config
+              configMap:
+                name: my-config
