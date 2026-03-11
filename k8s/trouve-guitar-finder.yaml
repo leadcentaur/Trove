@@ -4,7 +4,7 @@ metadata:
   name: trouve-guitar-finder
   namespace: default
 spec:
-  schedule: "0 8 * * 0"                # Once a week — Sunday at 8:00 AM
+  schedule: "0 8 * * 0"                
   timeZone: "America/New_York"          # Optional (K8s 1.27+)
   concurrencyPolicy: Forbid             # Don't overlap runs
   successfulJobsHistoryLimit: 3
