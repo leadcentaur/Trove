@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: trouve-scraper
+  name: trouve-guitar-finder
   namespace: default
 spec:
   schedule: "0 8 * * 0"                # Once a week — Sunday at 8:00 AM
@@ -19,13 +19,13 @@ spec:
       template:
         metadata:
           labels:
-            app: trouve-scraper
+            app: trouve-guitar-finder
         spec:
           restartPolicy: OnFailure
           containers:
             - name: trouve
               image: my-registry/trouve:latest
-              command: ["python", "-m", "trouve", "--headless", "-n", "95"]
+              command: ["python", "-m", "trouve", "--headless", "-n", "95", "-q", "guitar"]
               resources:
                 requests:
                   cpu: "100m"
@@ -33,14 +33,6 @@ spec:
                 limits:
                   cpu: "500m"
                   memory: "512Mi"
-              env:
-                - name: ENV_VAR
-                  value: "production"
-                - name: SECRET_KEY
-                  valueFrom:
-                    secretKeyRef:
-                      name: my-secret
-                      key: api-key
               volumeMounts:
                 - name: config
                   mountPath: /etc/config
