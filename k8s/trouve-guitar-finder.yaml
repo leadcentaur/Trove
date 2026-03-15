@@ -9,7 +9,7 @@ spec:
   concurrencyPolicy: Forbid             # Don't overlap runs
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
-  startingDeadlineSeconds: 200
+  startingDeadlineSeconds: 86400        # 24h grace period for missed runs
   suspend: false
   jobTemplate:
     spec:
