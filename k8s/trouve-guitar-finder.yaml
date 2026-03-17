@@ -15,7 +15,7 @@ spec:
     spec:
       backoffLimit: 3
       activeDeadlineSeconds: 1800       # Kill job after 30 min
-      ttlSecondsAfterFinished: 86400
+      ttlSecondsAfterFinished: 83400
       template:
         metadata:
           labels:
