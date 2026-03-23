@@ -6,22 +6,22 @@ from trouve.models.listing import Listing
 from trouve.scrapers.marketplace import MarketplaceScraper
 from trouve.utils.storage import save_listings
 
-
+#Update 
 class TestSearchParams:
     def test_build_url_basic(self):
-        params = SearchParams(location="seattle", query="couch")
+        params = SearchParams(location="toronto", query="couch")
         url = params.build_url()
-        assert "facebook.com/marketplace/seattle/search" in url
+        assert "facebook.com/marketplace/toronto/search" in url
         assert "query=couch" in url
 
     def test_build_url_with_price_range(self):
-        params = SearchParams(location="seattle", query="tv", min_price=50, max_price=200)
+        params = SearchParams(location="toronto", query="tv", min_price=50, max_price=200)
         url = params.build_url()
         assert "minPrice=50" in url
         assert "maxPrice=200" in url
 
     def test_build_url_omits_none_params(self):
-        params = SearchParams(location="seattle", query="desk")
+        params = SearchParams(location="toronto", query="desk")
         url = params.build_url()
         assert "minPrice" not in url
         assert "daysSinceListed" not in url
@@ -46,7 +46,7 @@ class TestListingModel:
                         "formatted_amount": "$150",
                     },
                     "location": {
-                        "reverse_geocode": {"city": "Seattle", "state": "WA"}
+                        "reverse_geocode": {"city": "toronto", "state": "WA"}
                     },
                     "primary_listing_photo": {
                         "image": {"uri": "https://scontent.xx.fbcdn.net/photo.jpg"}
@@ -63,7 +63,7 @@ class TestListingModel:
         assert listing.title == "Blue Couch"
         assert listing.price.amount == "150"
         assert listing.price.formatted == "$150"
-        assert listing.location.name == "Seattle, WA"
+        assert listing.location.name == "toronto, WA"
         assert listing.seller.name == "John Doe"
         assert len(listing.image_urls) == 1
         assert listing.source == "graphql"
@@ -169,11 +169,11 @@ class TestExtractIdFromHref:
 class TestStorage:
     def test_save_listings_creates_file(self, tmp_path: Path):
         listings = [Listing(id="100", title="Test Item")]
-        filepath = save_listings(listings, tmp_path, query="test", location="seattle")
+        filepath = save_listings(listings, tmp_path, query="test", location="toronto")
 
         assert filepath.exists()
         assert filepath.suffix == ".json"
-        assert "seattle" in filepath.name
+        assert "toronto" in filepath.name
         assert "test" in filepath.name
 
         data = json.loads(filepath.read_text())
