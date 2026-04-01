@@ -24,7 +24,8 @@ spec:
           restartPolicy: OnFailure
           containers:
             - name: trouve
-              image: my-registry/trouve:latest
+              image: trouve:latest
+              imagePullPolicy: Never
               command: ["python", "-m", "trouve", "--headless", "-n", "95", "-q", "guitar"]
               resources:
                 requests:
@@ -33,11 +34,3 @@ spec:
                 limits:
                   cpu: "500m"
                   memory: "512Mi"
-              volumeMounts:
-                - name: config
-                  mountPath: /etc/config
-                  readOnly: true
-          volumes:
-            - name: config
-              configMap:
-                name: my-config
